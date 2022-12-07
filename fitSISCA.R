@@ -1,0 +1,2 @@
+source("SISCAL.R")
+fitSISCA()

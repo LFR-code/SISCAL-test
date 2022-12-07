@@ -1,0 +1,145 @@
+---  
+title: "SISCA Batch Report - Stock child doc"
+author: Samuel D. N. Johnson
+date: \today
+geometry: letterpaper
+nocaption: false
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{longtable}
+- \usepackage{array}
+- \usepackage{multirow}
+- \usepackage[table]{xcolor}
+- \usepackage{wrapfig}
+- \usepackage{float}
+- \usepackage{colortbl}
+- \usepackage{pdflscape}
+- \usepackage{tabu}
+- \usepackage{threeparttable}
+- \usepackage{threeparttablex}
+- \usepackage[normalem]{ulem}
+- \usepackage{makecell}
+- \usepackage{caption}
+- \usepackage{pdflscape}
+- \newcommand{\blandscape}{\begin{landscape}}
+- \newcommand{\elandscape}{\end{landscape}}
+always_allow_html: yes
+params:
+  batchDir: "~/Work/code/models/stockAssessment/multispecies/ms3R/Outputs/"
+output: 
+  pdf_document:
+    keep_tex: true
+    fig_caption: true
+    latex_engine: pdflatex
+    template: ~/Work/write/templates/tex/TandF.latex
+  html_document:
+    self_contained: true
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    df_print: kable
+    keep_md: false
+  word_document:
+    df_print: kable
+    reference_docx: /Users/sdnjohnson/Work/write/templates/docx/basic.docx
+  bookdown::pdf_document2:
+    keep_tex: true
+    fig_caption: true
+    latex_engine: pdflatex
+    template: ~/Work/write/templates/tex/TandF.latex
+    fig_width: 7
+    fig_height: 6
+  bookdown::html_document2:
+    self_contained: true
+    df_print: kable
+    keep_md: false
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: false
+  bookdown::word_document2:
+    df_print: kable
+    reference_docx: /Users/sdnjohnson/Work/write/templates/docx/basic.docx
+---
+
+
+```{r, echo = FALSE, include = FALSE, warning = FALSE, message = FALSE}
+
+# Pull stockName
+stockName   <- stockLabs[p]
+nLenX       <- repObj$nLenX
+sexLabs     <- dimnames(reports$data$L_lxpgt)[[2]]
+
+# Make age comps caption for each
+# gear
+lenCompsCap <- character(length = nG*nLenX)
+ageCompsTCCap <- character(length = nG)
+for( xIdx in 1:nLenX)
+  for( gIdx in 1:nG )
+  {
+    capIdx <- (xIdx - 1) * nG + xIdx
+    lenCompsCap[capIdx] <- paste0(  "Model fits to annual ", stockName, " stock ", sexLabs[xIdx], 
+                                  " length compositions for the ", gearLabs[gIdx], 
+                                  " fleet. Grey bars are observed proportions at length ",
+                                  ", and lines/points are expected proportions at length.")
+
+}
+
+lenResidsCap <- paste( "Length composition residuals for the ", stockName,
+                        "sub-stock. Positive residuals are black ",
+                        "black, while negative residuals are red. ")
+
+propFemCap <- paste0( "Fits to proportion female data for the ", gearLabs," fleet. Bars show model ",
+                      "expected proportion female, and open circles show data. Bars are coloured grey ",
+                      "for years without data and black for years with data.")
+
+
+
+```
+
+### Length composition fits
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, fig.cap = lenCompsCap }
+
+plotCompFitYrs( repList = reports,
+                comps = "len",
+                save = FALSE,
+                savePath = "plotFitYrs",
+                xIdx = 1,
+                pIdx = p )
+
+plotCompFitYrs( repList = reports,
+                comps = "len",
+                save = FALSE,
+                savePath = "plotFitYrs",
+                xIdx = 2,
+                pIdx = p )
+
+plotCompFitYrs( repList = reports,
+                comps = "len",
+                save = FALSE,
+                savePath = "plotFitYrs",
+                xIdx = 3,
+                pIdx = p )
+
+```
+
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, fig.cap = lenResidsCap }
+
+plotCompResids( repList = reports,
+                pIdx = p )
+
+```
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, fig.cap = propFemCap }
+for( g in 1:nG )
+{
+  if(any(reports$data$pF_lpgt[,,g,] > 0) )
+    plotPropFem( repList = reports,
+                  gIdx = g )
+}
+
+```
+
+

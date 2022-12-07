@@ -1,0 +1,311 @@
+---  
+title: "SISCA OM Batch fit report"
+geometry: letterpaper
+nocaption: false
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{longtable}
+- \usepackage{array}
+- \usepackage{multirow}
+- \usepackage[table]{xcolor}
+- \usepackage{wrapfig}
+- \usepackage{float}
+- \usepackage{colortbl}
+- \usepackage{pdflscape}
+- \usepackage{tabu}
+- \usepackage{threeparttable}
+- \usepackage{threeparttablex}
+- \usepackage[normalem]{ulem}
+- \usepackage{makecell}
+- \usepackage{caption}
+- \usepackage{pdflscape}
+- \newcommand{\blandscape}{\begin{landscape}}
+- \newcommand{\elandscape}{\end{landscape}}
+always_allow_html: yes
+params:
+  batchDir: ""
+  prefix: "RetroStart"
+  iscamRep: "scal.rep"
+  refModel: "fit_baseMS"
+  retroLegends: "scenario"
+output: 
+  pdf_document:
+    keep_tex: true
+    fig_caption: true
+    latex_engine: pdflatex
+    template: ~/Work/write/templates/tex/TandF.latex
+  html_document:
+    self_contained: true
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    df_print: kable
+    keep_md: false
+  word_document:
+    df_print: kable
+    reference_docx: /Users/sdnjohnson/Work/write/templates/docx/basic.docx
+  bookdown::pdf_document2:
+    keep_tex: true
+    fig_caption: true
+    latex_engine: pdflatex
+    template: ~/Work/write/templates/tex/TandF.latex
+    fig_width: 7
+    fig_height: 6
+  bookdown::html_document2:
+    self_contained: true
+    df_print: kable
+    keep_md: false
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: false
+  bookdown::word_document2:
+    df_print: kable
+    reference_docx: /Users/sdnjohnson/Work/write/templates/docx/basic.docx
+---
+
+
+
+
+```{r, setup, message=FALSE, warning=FALSE, include=FALSE, echo = FALSE}
+
+# I usually load my libraries up front to keep things organized
+library( bookdown )
+library( knitr )
+library( kableExtra )
+library( dplyr )
+library( stringr )
+library( tidyverse )
+library( here )
+library( tmbstan )
+library( rstan )
+
+knitr::opts_chunk$set(  fig.pos = 'p',
+                        out.width = '100%', dpi=300, 
+                        root.dir = here::here("Outputs/fits",params$batchDir),
+                        message = FALSE, warning = FALSE, echo = FALSE,
+                        fig.width = 8, fig.height = 6 )
+
+options(warn = -1)
+
+source(here("SISCAtools.R"))
+source(here("SISCAplots.R"))
+source(here("SISCAfuns.R"))
+source(here("SISCArefPts.R"))
+source(here("stan_utility.R"))
+source(here("read.admb.R"))
+
+# Read in report file
+
+batchFolderPath <- file.path(params$batchDir)
+repList <- .loadBatch(groupFolder = params$batchDir,prefix = params$prefix)
+
+
+
+nFits <- length(repList)
+
+fYears    <- numeric( length = nFits)
+lYears    <- numeric( length = nFits)
+pdHess    <- logical( length = nFits)
+nInfCVs   <- numeric( length = nFits)
+scenarios <- character( length = nFits)
+modelHyp  <- character( length = nFits)
+nTs       <- integer( length = nFits )
+
+for( i in 1:nFits )
+{
+  scenarios[i]<- repList[[i]]$ctlList$ctrl$dataScenarioName
+  modelHyp[i] <- repList[[i]]$ctlList$ctrl$modelHypName
+  fYears[i]   <- repList[[i]]$fYear
+  lYears[i]   <- repList[[i]]$lYear
+  pdHess[i]   <- repList[[i]]$sdrepOpt$pdHess
+  nInfCVs[i]  <- length(which(!is.finite(repList[[i]]$grad$cv)))
+  nTs[i]      <- repList[[i]]$repOpt$nT
+}
+
+nP      <- repList[[1]]$repOpt$nP
+nT      <- max(nTs)
+nG      <- repList[[1]]$repOpt$nG
+
+whichLongest <- which.max(nTs)
+
+if(is.null(params$refModel))
+{
+  refModelIdx <- whichLongest
+} else refModelIdx <- which( names(repList) == refModel )
+
+gearLabs  <- repList[[1]]$gearLabs
+stockLabs <- repList[[1]]$stock
+species   <- repList[[1]]$ctlList$ctrl$speciesName
+
+# Read ISCAM rep file
+ISCAMrep <- read.rep(here::here("Data",params$iscamRep))
+
+# sink(here("output.txt"))
+# browser()
+
+if( params$retroLegends == "scenario" )
+  legTxt <- scenarios
+
+if( params$retroLegends == "modelHyp" )
+  legTxt <- modelHyp
+
+```
+
+# Data Scenarios and Model Hypotheses
+
+```{r scenHypTable, echo = FALSE, warning = FALSE}
+
+# Make table of fits
+batchDescTable <- data.frame( scenario = scenarios,
+                              modelHyp = modelHyp,
+                              fYear    = fYears,
+                              lYear    = lYears,
+                              pdHess   = pdHess,
+                              nInfCVs  = nInfCVs ) %>%
+                    dplyr::arrange( modelHyp, scenario ) %>%
+                    mutate( pdHess = ifelse( pdHess,
+                                      cell_spec(pdHess, color = "black", bold = T),
+                                      cell_spec(pdHess, color = "red", bold = T) ) 
+                          )
+
+kable(  batchDescTable, escape = FALSE, 
+        caption = "Summary of model fits included in the batch", booktabs = T,
+        align = rep("c",ncol(batchDescTable))) %>%
+  kable_styling(latex_options = c("striped", "scale_down","hold_position"),
+                bootstrap_options = c("striped", "hover"))
+
+
+```
+
+```{r tabFigCaps, include = FALSE }
+retroBioCap <- "Retrospective biomass estimates, the longest time series
+is the reference biomass, shown by the thick red line, and the shorter
+model histories are shown as thin grey lines."
+
+retroDepCap <- "Retrospective spawning biomass depletion estimates, 
+the longest time series is the reference model, shown by the thick red line, and the shorter
+model histories are shown as thin grey lines."
+
+retroRecCap <- "Retrospective recruitment estimates, the longest time series
+is the reference model, shown by the thick black line, and the shorter
+model histories are shown as thin grey lines."
+
+retroRelRecCap <- "Retrospective relative recruitment estimates, 
+the longest time series is the reference model, shown by the thick black line, and the shorter
+model histories are shown as thin grey lines."
+```
+
+# Parameters of interest
+
+```{r parTab, echo = FALSE }
+
+# B0_ip     <- array(NA, dim = c(nFits,nP))
+# qd_ip     <- array(NA, dim = c(nFits,nP))
+# qs_ip     <- array(NA, dim = c(nFits,nP))
+# R0_ip     <- array(NA, dim = c(nFits,nP))
+# Rinit_ip  <- array(NA, dim = c(nFits,nP))
+# M0_ip     <- array(NA, dim = c(nFits,nP))
+# Mbar_ip   <- array(NA, dim = c(nFits,nP))
+
+colNames <- c(  "dataScenario",
+                "modelHyp",
+                "Stock",
+                "$B_0$",   
+                "$R_0$",   
+                "$\\bar{R}$",   
+                "$R_{init}$",
+                "$F_{init}$",
+                "$M_0$",   
+                "$q_s$",   
+                "$q_d$",
+                "pdHess" ) 
+
+parTable <- matrix(NA, nrow = nFits*nP, ncol = length(colNames) )
+colnames(parTable) <- colNames
+parTable <- as.data.frame(parTable)
+
+for( i in 1:nFits )
+  for( p in 1:nP )
+  {
+
+    rowIdx <- (p-1) * nFits + i
+    parTable[rowIdx,"dataScenario"]     <- repList[[i]]$ctlList$ctrl$dataScenarioName
+    parTable[rowIdx,"modelHyp"]         <- repList[[i]]$ctlList$ctrl$modelHypName
+    parTable[rowIdx,"Stock"]            <- stockLabs[p]
+    parTable[rowIdx,"$B_0$"]            <- round(repList[[i]]$repOpt$B0_p[p],3)
+    parTable[rowIdx,"$R_0$"]            <- round(repList[[i]]$repOpt$R0_p[p],3)
+    parTable[rowIdx,"$\\bar{R}$"]       <- round(repList[[i]]$repOpt$Rbar_p[p],3)
+    parTable[rowIdx,"$R_{init}$"]       <- round(repList[[i]]$repOpt$Rinit_p[p],3)
+    parTable[rowIdx,"$F_{init}$"]       <- round(repList[[i]]$repOpt$Finit_p[p],3)
+    parTable[rowIdx,"$M_0$"]            <- round(repList[[i]]$repOpt$M0_xp[2,p],3)
+    parTable[rowIdx,"$q_rv$"]            <- round(repList[[i]]$repOpt$qhat_pg[p,5],3)
+    parTable[rowIdx,"$q_hf$"]            <- round(repList[[i]]$repOpt$qhat_pg[p,6],3)
+    parTable[rowIdx,"$q_hr$"]            <- round(repList[[i]]$repOpt$qhat_pg[p,7],3)
+    parTable[rowIdx,"pdHess"]           <- pdHess[i]
+  }
+
+parTable <- parTable %>%
+            dplyr::arrange( Stock, modelHyp, dataScenario ) %>%
+            mutate( pdHess = ifelse( pdHess,
+                          cell_spec(pdHess, color = "red", bold = T),
+                          cell_spec(pdHess, color = "black", bold = T) ) 
+                  )
+
+if( nP == 1 )
+{
+  kable(  parTable, escape = FALSE, 
+          caption = "MLEs of model parameters of interest for all stocks under different batch runs.", booktabs = T,
+          align = rep("c",ncol(parTable))) %>%
+    kable_styling(latex_options = c("striped", "scale_down","hold_position"),
+                  bootstrap_options = c("striped", "hover")) %>%
+    kableExtra::group_rows(stockLabs[1], 1, nFits )
+}
+
+if( nP == 3 )
+{
+  kable(  parTable, escape = FALSE, 
+          caption = "MLEs of model parameters of interest for all stocks under different batch runs.", booktabs = T,
+          align = rep("c",ncol(parTable))) %>%
+    kable_styling(latex_options = c("striped", "scale_down","hold_position"),
+                  bootstrap_options = c("striped", "hover")) %>%
+    kableExtra::group_rows(stockLabs[1], 1, nFits ) %>%
+    kableExtra::group_rows(stockLabs[2], nFits+1, 2*nFits ) %>%
+    kableExtra::group_rows(stockLabs[3], 2*nFits + 1, 3*nFits )
+}
+```
+
+# Biomass comparison
+
+```{r retroBioPlot, fig.cap = retroBioCap}
+plotRetroSBt(reportList = repList, legendText = legTxt )
+```
+
+```{r retroDepBio, fig.cap = retroDepCap}
+plotRetroSBt(reportList = repList, dep = TRUE, legendText = legTxt )
+```
+
+<!-- ```{r retroRelRefBio, fig.cap = retroDepCap}
+plotRetroSBt(reportList = repList, relative = TRUE, refIdx = 1,
+              legendText = legTxt )
+``` -->
+
+
+# Recruitment comparison
+
+
+```{r retroRecPlot, fig.cap = retroRecCap}
+plotRetroRt(reportList = repList, legendText = legTxt )
+```
+
+```{r retroRelRec, fig.cap = retroRelRecCap}
+plotRetroRt(reportList = repList, dep = TRUE, legendText = legTxt )
+```
+
+<!-- ```{r retroRelRefRec, fig.cap = retroDepCap}
+plotRetroRt( reportList = repList, dep = FALSE, relative = TRUE, ref = 1,
+             legendText = legTxt )
+``` -->
+
+
+

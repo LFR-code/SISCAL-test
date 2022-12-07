@@ -1,0 +1,746 @@
+---  
+title: "SISCAL OM fit report"
+geometry: letterpaper
+nocaption: false
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{longtable}
+- \usepackage{array}
+- \usepackage{multirow}
+- \usepackage[table]{xcolor}
+- \usepackage{wrapfig}
+- \usepackage{float}
+- \usepackage{colortbl}
+- \usepackage{pdflscape}
+- \usepackage{tabu}
+- \usepackage{threeparttable}
+- \usepackage{threeparttablex}
+- \usepackage[normalem]{ulem}
+- \usepackage{makecell}
+- \usepackage{caption}
+- \usepackage{pdflscape}
+- \newcommand{\blandscape}{\begin{landscape}}
+- \newcommand{\elandscape}{\end{landscape}}
+always_allow_html: yes
+params:
+  rootDir: "~/Work/code/models/stockAssessment/SISCA/Outputs/fits/fit_04022020101311"
+  RdataFile: "fit_04022020101311.RData"
+  prevRep: "scal.rep"
+output: 
+  pdf_document:
+    keep_tex: true
+    fig_caption: true
+    latex_engine: pdflatex
+    template: ~/Work/write/templates/tex/TandF.latex
+  html_document:
+    self_contained: true
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    df_print: kable
+    keep_md: false
+  word_document:
+    df_print: kable
+    reference_docx: /Users/sdnjohnson/Work/write/templates/docx/basic.docx
+  bookdown::pdf_document2:
+    keep_tex: true
+    fig_caption: true
+    latex_engine: pdflatex
+    template: ~/Work/write/templates/tex/TandF.latex
+    fig_width: 7
+    fig_height: 6
+  bookdown::html_document2:
+    self_contained: true
+    df_print: kable
+    keep_md: false
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: false
+  bookdown::word_document2:
+    df_print: kable
+    reference_docx: /Users/sdnjohnson/Work/write/templates/docx/basic.docx
+---
+
+# Data Scenario and Model Hypothesis
+
+```{r, setup, message=FALSE, warning=FALSE, include=FALSE, echo = FALSE}
+
+# I usually load my libraries up front to keep things organized
+library( bookdown )
+library( knitr )
+library( kableExtra )
+library( dplyr )
+library( stringr )
+library( tidyverse )
+library( here )
+library( tmbstan )
+library( rstan )
+
+knitr::opts_chunk$set(  fig.pos = 'p',
+                        out.width = '100%', dpi=300, 
+                        root.dir = params$rootDir,
+                        message = FALSE, warning = FALSE, echo = FALSE,
+                        fig.width = 8, fig.height = 6 )
+
+options(warn = -1)
+
+source(here("SISCAtools.R"))
+source(here("SISCAplots.R"))
+source(here("SISCAfuns.R"))
+source(here("SISCArefPts.R"))
+source(here("stan_utility.R"))
+source(here("read.admb.R"))
+
+# Read in report file
+
+repFilePath <- file.path(params$rootDir, params$RdataFile)
+reports     <- readRDS(repFilePath)
+
+repObj <- c(reports$repOpt, reports$data)
+repObj <- renameReportArrays(repObj = repObj, datObj = reports$data )
+repObj <- calcRefPts(repObj)
+reports$repOpt <- repObj
+
+fYear   <- reports$fYear
+lYear   <- reports$lYear
+nP      <- repObj$nP
+nT      <- repObj$nT
+nG      <- repObj$nG
+nLenX   <- repObj$nLenX
+
+calcSD <- reports$ctlList$ctrl$calcSD
+gradTable <- reports$grad
+
+fitReport <- reports$fitReport
+nPhase    <- nrow(fitReport)-1
+
+isPosts <- !is.null(reports$posts)
+isStan  <- !is.null(reports$stanfit)
+
+
+gearLabs  <- reports$gearLabs
+stockLabs <- reports$stock
+species   <- reports$ctlList$ctrl$speciesName
+sexLabs   <- dimnames(reports$data$L_lxpgt)[[2]]
+
+gearComm <- 1:nG
+
+nonfiniteSEs  <- !is.finite(gradTable[,2])
+nanSEs        <- is.nan(gradTable[,2])
+
+# Read ISCAM rep file
+SCALrep <- lisread(here("Data",params$prevRep))
+
+# sink(here("output.txt"))
+# browser()
+
+```
+
+Standard fit report for fits of SISCAL to `r species` data.
+
+Data Scenario: `r reports$ctlList$ctrl$dataScenarioName`
+
+Model Hypothesis: `r reports$ctlList$ctrl$modelHypName`
+
+Species: `r reports$ctlList$data$species`
+
+Stocks: `r reports$ctlList$data$stocks`
+
+## Final phase convergence diagnostics
+
+Max Gradient: `r fitReport[nPhase,]$maxGrad`
+
+Objective Function value: `r fitReport[nPhase,]$objFun`
+
+Time to fit model:  `r round(sum(fitReport[1:nPhase,"time"],na.rm = T),2)`
+
+PD Hessian: `r ifelse( calcSD, reports$sdrepOpt$pdHess, calcSD)`
+
+No. of Non-finite SEs: `r sum((nonfiniteSEs |nanSEs))`
+
+
+
+```{r, captions, include = FALSE, echo = FALSE}
+SBtRtMtFtCaption <- paste("Time series of spawning biomass with scaled spawn indices (top),
+recruitments (second row), and harvest rates (bottom row) for 
+substocks of ", species, ". Catch bars in the harvest rate plot show landings only (not releases).", sep = "")
+
+allBioCap <- "Posterior mean and 95\\% credibility intervals of legal (<81cm) and spawning biomass, and posterior mean total Atlantic Halibut biomass. The vertical dashed line shows 1988, the first year where fish below 81cm were discarded in the long-line fleets."
+
+idxFitsCap <- "Model fits to abundance and biomass indices, with standardised log residuals for each index (bottom panel)."
+
+AgeDataFitCap <- "Time-averaged model fits to length composition data. Sexes/stocks are left to right, 
+and gears are top to bottom."
+
+AggAgeDataFitCap <- "Model fits to age data, averaged over stock and time. Gears are top to bottom."
+# SBsptCaption <- "Spawning biomass (red line), catch (grey bars), and scaled biomass indices (coloured points), for all stocks and species. Indices are scaled by the fleet catchability, then by the ratio of spawning biomass to vulnerable biomass."
+
+# StdIdxCap   <- "Standardised vulnerable biomass (coloured lines) and the scaled and standardised biomass indices they are fitting to (coloured points), for all stocks and species."
+
+# IdxResCap   <- "Standardised residuals for model fits to biomass indices (coloured points) and a loess smoother with a 20% confidence interval (coloured lines and grey regions), for all fleets, stocks, and species."
+
+RecPlotCap <- "Age-1 recruitments for all stocks. Equilibrium unfished recruitment $R_0$ is 
+indicated by the horizontal dashed line. Second row shows recruitment residuals on the log scale, 
+with the average of estimated residuals shown by the horizontal red dashed line."
+
+# RecDevPlotCap <- "Deviations from expected recruitment for all species and stocks."
+
+refPtsUcap <- "Equilibrium yield (top) and biomass (bottom) curves as a function of total legal harvest rates. $U_{MSY}$ reference points are shown as closed circles on each line. Posterior 95\\% credibility intervals in yield and biomass are shown as envelopes, while the 95\\% credibility interval for legal $U_{MSY}$ is shown by the vertical dashed lines."
+
+kobePlotCap <- "Phase plot showing spawning biomass (vertical axis) and total legal harvest rate (horizontal axis) relative to $U_{MSY}$ reference points. Arrows show the direction of time, beginning in 1970 and ending in 2020. Equilibrium spawning biomass is shown as a faint grey curve in the background of the plot."
+
+# ProbLenAgeCap <- "Probability curves of length-at-age for males (blue) and females (red). Curves show the probability of each length within an age group, and opacity of the lines increases with age."
+
+# tvqCap <- "Time series of observation model catchability (log-scale, coloured points) for the commercial fleets and Hecate Strait Multispecies Assemblage survey. Lines show the smoothed trend using a Loess smoother"
+
+# fishingMortCap <- "Estimates of fishing mortality from each fleet (coloured points and lines), gridded over species (columns) and stocks (rows). Fishing mortality rates are found using an iterative Newton-Rhapson solver conditioned on the observed catch."
+
+SRplotCap <- "Stock-recruit curves (solid lines) and modeled recruitments (coloured points)"
+
+selAgeCap <- "Selectivity-at-age for each fleet (rows), and sex (columns)."
+selLenCap <- "Selectivity-at-length for each fleet (rows)."
+
+catchBarCap <- "Catch (landings and releases) in biomass units, with colours corresponding to commercial fleets."
+
+relCap <- "Total releases in biomass units by fleet."
+
+divCaption <- "Trace plots of parameters with $\\hat{R} > 1.5$ showing divergences."
+
+dataObjFunCap <- "Objective function components for data observations."
+
+stdPriorObjFunCap <- "Objective function components for standard (single level) and hyper-priors."
+
+hierPriorObjFunCap <- "Objective function components for hierarchical (mult-level) priors."
+
+sdRepCap  <- "SD report showing leading parameter estimates, standard errors, 
+gradient components, and coefficients of variation. Gradients with a magnitude
+above 1e-3 are shown in bold red, while the coefficients of variation (cv) are  
+coloured so that smaller values are lighter in colour, and larger values 
+are darker, with cvs above .5 in bold, and cvs above 3 in red."
+
+lenDataCVtabCap <- "Estimated standard deviations for length composition data
+series."
+
+otherDataCVtabCap <- "Estimated standard deviations for proportion females
+observed in the length composition data (first 6 columns), and survey indices
+of Atlantic Halibut (last two columns)."
+
+deltaLNprobsCap <- "Probability of detection of a spawning event,
+with respect to spawning stock biomass. Lines show the modeled probability
+and the points indicate whether a spawn was detected, with 0 
+for no spawn detected, and 1 for a positive index."
+
+compCorrMtxCap <- character(length = 3)
+for( gIdx in 1:nG)
+  compCorrMtxCap[gIdx] <- paste( "Estimated correlation matrices for age composition residuals in the ",
+                                 gearLabs[gIdx], " fleet. The circles above the visualise the numbers below the diagonal.")
+
+```
+
+
+# Model fits
+
+## At-a-glance
+
+```{r, AtAGlance, echo = FALSE, message = FALSE, fig.cap = SBtRtMtFtCaption }
+plotMulti(ts = c("SBtIdx","Rt","Ftg"), repList = reports)
+```
+
+```{r, allBio, echo = FALSE, message = FALSE, fig.cap = allBioCap }
+plotTotLegalB(repList = reports)
+```
+
+
+## Fits to data
+
+```{r, idxFits, echo = FALSE, fig.cap = idxFitsCap }
+plotIdxFits( repList = reports )
+```
+
+
+
+```{r deltaLNProbs, echo = FALSE, fig.cap = deltaLNprobsCap}
+# plotDeltaLNFits( reports = reports )
+```
+
+```{r, lenDataFits, echo = FALSE, fig.cap = AgeDataFitCap }
+
+plotLengthFitAvg(  repList = reports )
+
+```
+
+```{r, ageDataFitsAvg, echo = FALSE, fig.cap = AggAgeDataFitCap }
+
+# plotAgeFitAggAvg( repList = reports)
+
+```
+
+
+
+```{r dataCVtables, echo = FALSE }
+
+# Pull age obs error and survey obs errors
+tauLen_xpg  <- sqrt( repObj$tau2Len_xpg[,,1:6,drop = FALSE] )
+tauSurv_pg  <- repObj$tauObs_pg[,5:6,drop = FALSE]
+tauPropF_pg <- sqrt( repObj$tau2PropF_pg )
+
+# Make the table
+lenDataCVtab <- matrix(NA, nrow = nLenX, ncol = 6 )
+rownames( lenDataCVtab ) <- sexLabs
+colnames( lenDataCVtab ) <- c( "$\\tau^{len}_{LLNAFO3}$",
+                            "$\\tau^{len}_{LLNAFO4}$",
+                            "$\\tau^{len}_{OTNAFO3}$",
+                            "$\\tau^{len}_{OTNAFO4}$",
+                            "$\\tau^{len}_{RV}$",
+                            "$\\tau^{len}_{HS}$" )
+
+lenDataCVtab <- as.data.frame(lenDataCVtab)
+lenDataCVtab[,1] <- round(tauLen_xpg[,1,1],3)
+lenDataCVtab[,2] <- round(tauLen_xpg[,1,2],3)
+lenDataCVtab[,3] <- round(tauLen_xpg[,1,3],3)
+lenDataCVtab[,4] <- round(tauLen_xpg[,1,4],3)
+lenDataCVtab[,5] <- round(tauLen_xpg[,1,5],3)
+lenDataCVtab[,6] <- round(tauLen_xpg[,1,6],3)
+
+kable(  lenDataCVtab, escape = FALSE, 
+        caption = lenDataCVtabCap, booktabs = T,
+        align = rep("c",ncol(lenDataCVtab))) %>%
+  kable_styling(latex_options = c("striped", "scale_down","hold_position"),
+                bootstrap_options = c("striped", "hover"))
+
+otherDataCVtab <- matrix(NA, nrow = 8, ncol = nP )
+colnames(otherDataCVtab) <- stockLabs
+rownames(otherDataCVtab) <- c(  "$\\tau^{propF}_{LLNAFO3}$",
+                                "$\\tau^{propF}_{LLNAFO4}$",
+                                "$\\tau^{propF}_{OTNAFO3}$",
+                                "$\\tau^{propF}_{OTNAFO4}$",
+                                "$\\tau^{propF}_{RV}$",
+                                "$\\tau^{propF}_{HS}$",
+                                "$\\tau^{surv}_{RV}$",
+                                "$\\tau^{surv}_{HS}$"   )
+
+otherDataCVtab[1,] <- round(tauPropF_pg[,1],3)
+otherDataCVtab[2,] <- round(tauPropF_pg[,2],3)
+otherDataCVtab[3,] <- round(tauPropF_pg[,3],3)
+otherDataCVtab[4,] <- round(tauPropF_pg[,4],3)
+otherDataCVtab[5,] <- round(tauPropF_pg[,5],3)
+otherDataCVtab[6,] <- round(tauPropF_pg[,6],3)
+otherDataCVtab[7,] <- round(tauSurv_pg[,1],3)
+otherDataCVtab[8,] <- round(tauSurv_pg[,2],3)
+
+kable(  otherDataCVtab, escape = FALSE, 
+        caption = otherDataCVtabCap, booktabs = T,
+        align = rep("c",ncol(otherDataCVtab))) %>%
+  kable_styling(latex_options = c("striped", "scale_down","hold_position"),
+                bootstrap_options = c("striped", "hover"))
+```
+
+## Recruitment
+
+```{r, recruitments, echo = FALSE, fig.cap = RecPlotCap }
+plotMulti(ts = c("Rt","RtResids"), repList = reports )
+```
+
+
+```{r, stockRecCurves, echo = FALSE, fig.cap = SRplotCap }
+plotSR( repList = reports )
+```
+
+## Natural Mortality
+```{r MtSeries, echo = FALSE, fig.cap = "Mt"}
+plotMulti(ts = "Mt", repList = reports)
+```
+
+```{r ddM, echo = FALSE, fig.cap = "densityDependent M"}
+# plotDDmort(repObj = reports$repOpt)
+```
+
+```{r natMortAtAge, fig.cap = "Total natural mortality at age"}
+# plotNatMortAtAge( repList = reports,
+#                   nCols = 2,
+#                   pIdx = 1)
+```
+
+```{r totMortAtAge, fig.cap = "Total mortality at age"}
+# plotTotMortAtAge( repList = reports,
+#                   nCols = 2,
+#                   pIdx = 1 )
+```
+
+## Selectivity and Catch
+
+```{r, plotCatchBarsAllYrs, echo = FALSE, fig.cap = catchBarCap }
+plotC_pgt( repList = reports)
+```
+
+
+```{r, plotRelCatch, echo = FALSE, fig.cap = relCap }
+plotRelCatch(reports ) 
+```
+
+
+```{r, plotSelAge, echo = FALSE, fig.cap = selAgeCap }
+plotSag(repList = reports, fleets = gearComm )
+```
+
+```{r, plotSelLen, echo = FALSE, fig.cap = selLenCap }
+plotSlg(repList = reports )
+```
+
+
+```{r, plotProbRelease, echo = FALSE, fig.cap = "Release prob"}
+plotProbRelease(reports)
+```
+
+```{r, plotProbLenAge, echo = FALSE, fig.cap = "Length-at-age distributions"}
+plotProbLenAge(reports)
+```
+
+## Reference Points
+
+
+```{r, refPtsU, fig.cap = refPtsUcap, echo = FALSE, include = TRUE}
+
+plotRefPtsU( reports,
+              pIdx = 1)
+
+
+```
+
+```{r, kobePhase, fig.cap = kobePlotCap, echo = FALSE, include = TRUE}
+
+plotKobePhase(  reports,
+                pIdx = 1)
+
+
+```
+
+# Stock specific fits
+
+```{r, StockChild, echo = FALSE, message = FALSE, results = "asis" }
+for( p in 1:nP)
+{
+  cat(paste("## ", stockLabs[p], "\n",sep = "")) 
+
+  childDoc <- knitr::knit_child(here::here("Documentation","stockChild.Rmd"),options = list(results = "asis"),quiet = TRUE)
+
+  cat(childDoc)
+}
+
+```
+
+# Optimisation performance
+
+## Objective function components
+```{r objFunCpts, echo = FALSE, include = FALSE}
+
+# Pull objective function components
+objFun            <- reports$repOpt$objFun
+obsIdxNLL_pg      <- reports$repOpt$obsIdxNLL_pg
+ageObsNLL_pg      <- reports$repOpt$ageObsNLL_pg
+lenObsNLL_xpg     <- reports$repOpt$lenObsNLL_xpg
+
+mort_nlp          <- reports$repOpt$mort_nlp
+Mdev_nlp          <- reports$repOpt$Mdev_nlp
+tvMnlp_p          <- reports$repOpt$tvMnlp_p
+rec_nlp           <- reports$repOpt$rec_nlp
+init_nlp          <- reports$repOpt$init_nlp
+h_nlp             <- reports$repOpt$h_nlp
+hDev_nlp          <- reports$repOpt$hDev_nlp
+nlptau2idx_pg     <- reports$repOpt$nlptau2idx_pg
+nlptau2idx_g      <- reports$repOpt$nlptau2idx_g
+
+tvselAlphaDevNLP  <- reports$repOpt$tvselAlphaDevNLP
+tvselBetaDevNLP   <- reports$repOpt$tvselBetaDevNLP
+selAlphaDevNLP_pg <- reports$repOpt$selAlphaDevNLP_pg
+selBetaDevNLP_pg  <- reports$repOpt$selBetaDevNLP_pg
+selAlphaNLP_g     <- reports$repOpt$selAlphaNLP_g
+selBetaNLP_g      <- reports$repOpt$selBetaNLP_g
+obsMixedIdxNLL_g  <- reports$repOpt$obsMixedIdxNLL_g
+ageObsNLL_g       <- reports$repOpt$ageObsNLL_g
+lnB0_p            <- log(reports$repOpt$B0_p) 
+psi_nlp           <- reports$repOpt$psi_nlp
+```
+
+```{r dataObjFun, echo = FALSE}
+dataColNames <- c(  "objFun",
+                    "obsRV",
+                    "obsHS",
+                    "lenLL_NAFO3",
+                    "lenLL_NAFO4",
+                    "lenOT_NAFO3",
+                    "lenOT_NAFO4",
+                    "lenRV_4VWX",
+                    "lenHS_f",
+                    "lenHS_r" )
+
+dataRowNames <- c(  "Total", sexLabs )
+
+obs5Tot <- c( sum( obsIdxNLL_pg[,5] ), rep(NA,nLenX))
+obs6Tot <- c( sum( obsIdxNLL_pg[,6] ), rep(NA,nLenX))
+len1Tot <- c( sum( lenObsNLL_xpg[,1,1] ), lenObsNLL_xpg[,1,1])
+len2Tot <- c( sum( lenObsNLL_xpg[,1,2] ), lenObsNLL_xpg[,1,2])
+len3Tot <- c( sum( lenObsNLL_xpg[,1,3] ), lenObsNLL_xpg[,1,3])
+len4Tot <- c( sum( lenObsNLL_xpg[,1,4] ), lenObsNLL_xpg[,1,4])
+len5Tot <- c( sum( lenObsNLL_xpg[,1,5] ), lenObsNLL_xpg[,1,5])
+len6Tot <- c( sum( lenObsNLL_xpg[,1,6] ), lenObsNLL_xpg[,1,6])
+len7Tot <- c( sum( lenObsNLL_xpg[,1,7] ), lenObsNLL_xpg[,1,7])
+
+dataObjFunTab <- matrix( NA, nrow = 1 + length(sexLabs), 
+                             ncol = length(dataColNames))
+colnames(dataObjFunTab) <- dataColNames
+rownames(dataObjFunTab) <- dataRowNames
+
+dataObjFunTab <- as.data.frame(dataObjFunTab)
+
+# Fill
+dataObjFunTab$objFun      <- round(objFun,2)
+dataObjFunTab$obsRV       <- round(obs5Tot,2)
+dataObjFunTab$obsHS       <- round(obs6Tot,2)
+dataObjFunTab$lenLL_NAFO3 <- round(len1Tot,2)
+dataObjFunTab$lenLL_NAFO4 <- round(len2Tot,2)
+dataObjFunTab$lenOT_NAFO3 <- round(len3Tot,2)
+dataObjFunTab$lenOT_NAFO4 <- round(len4Tot,2)
+dataObjFunTab$lenRV_4VWX  <- round(len5Tot,2)
+dataObjFunTab$lenHS_f     <- round(len6Tot,2)
+dataObjFunTab$lenHS_r     <- round(len7Tot,2)
+
+
+kable(  dataObjFunTab, escape = FALSE, 
+        caption = dataObjFunCap, booktabs = T,
+        align = rep("c",ncol(dataObjFunTab))) %>%
+  kable_styling(latex_options = c("striped", "scale_down","hold_position"),
+                bootstrap_options = c("striped", "hover"))
+```
+
+
+```{r stdPriorObjFunTab, echo = FALSE }
+
+
+stdPriorColNames <- c(  "objFun",
+                        "recDevs",
+                        "initDevs",
+                        "h",
+                        "M",
+                        "tvMdev",
+                        "IGtau_surf",
+                        "IGtau_dive",
+                        "tvSelAlpha",
+                        "tvSelBeta",
+                        "selAlphaRed",
+                        "selAlphaSR",
+                        "selAlphaGn",
+                        "selBetaRed",
+                        "selBetaSR",
+                        "selBetaGn",
+                        "lnB0",
+                        "lnRinit",
+                        "psiSOK" )
+
+
+
+
+                        
+
+stdPriorObjFunTab <- matrix( NA, nrow = length(stdPriorColNames), ncol = 1)
+rownames(stdPriorObjFunTab) <- stdPriorColNames
+stdPriorObjFunTab <- as.data.frame(stdPriorObjFunTab)
+
+stdPriorObjFunTab["objFun",1]        <- round(objFun,2)
+stdPriorObjFunTab["recDevs",1]       <- round(rec_nlp,2)
+stdPriorObjFunTab["initDevs",1]      <- round(init_nlp,2)
+stdPriorObjFunTab["h",1]             <- round(h_nlp,2)
+stdPriorObjFunTab["M",1]             <- round(mort_nlp,2)
+stdPriorObjFunTab["tvMdev",1]        <- round(sum(tvMnlp_p),2)
+stdPriorObjFunTab["psiSOK",1]        <- round(psi_nlp,2)
+stdPriorObjFunTab["IGtau_surf",1]    <- round( sum(nlptau2idx_pg[,4]),2)
+stdPriorObjFunTab["IGtau_dive",1]    <- round( sum(nlptau2idx_pg[,5]),2)
+stdPriorObjFunTab["tvSelAlpha",1]    <- round(tvselAlphaDevNLP,2)
+stdPriorObjFunTab["tvSelBeta",1]     <- round(tvselBetaDevNLP,2)
+stdPriorObjFunTab["selAlphaRed",1]   <- round(sum(selAlphaNLP_g[1]),2)
+stdPriorObjFunTab["selAlphaSR",1]    <- round(sum(selAlphaNLP_g[1]),2)
+stdPriorObjFunTab["selAlphaGn",1]    <- round(sum(selAlphaNLP_g[3]),2)
+stdPriorObjFunTab["selBetaRed",1]    <- round(sum(selBetaNLP_g[1]),2)
+stdPriorObjFunTab["selBetaSR",1]     <- round(sum(selBetaNLP_g[1]),2)
+stdPriorObjFunTab["selBetaGn",1]     <- round(sum(selBetaNLP_g[3]),2)
+stdPriorObjFunTab["lnB0",1]          <- sum(log(reports$repOpt$B0_p))
+stdPriorObjFunTab["lnRinit",1]       <- sum(log(reports$repOpt$Rinit_p))
+
+
+
+kable(  stdPriorObjFunTab, escape = FALSE, 
+        caption = stdPriorObjFunCap, booktabs = T,
+        align = rep("c",ncol(stdPriorObjFunTab))) %>%
+  kable_styling(latex_options = c("striped", "scale_down","hold_position"),
+                bootstrap_options = c("striped", "hover"))
+
+```
+
+```{r hierPriorObjFunTab, echo = FALSE, eval=FALSE }
+
+hierPriorColNames <- c( "objFun",
+                        "MDev",
+                        "hDev",
+                        "selAlphaDevR",
+                        "selAlphaDevSR",
+                        "selAlphaDevGn",
+                        "selBetaDevR",
+                        "selBetaDevSR",
+                        "selBetaDevGn" )
+
+hierPriorObjFunTab <- matrix( NA, ncol = 1, nrow = length(hierPriorColNames))
+rownames(hierPriorObjFunTab) <- hierPriorColNames
+hierPriorObjFunTab <- as.data.frame(hierPriorObjFunTab)
+
+
+hierPriorObjFunTab["objFun",1]           <- round(objFun,2)   
+hierPriorObjFunTab["MDev",1]             <- round(Mdev_nlp,2)
+hierPriorObjFunTab["hDev",1]             <- round(hDev_nlp,2)
+hierPriorObjFunTab["selAlphaDevR",1]     <- round(sum(selAlphaDevNLP_pg[,1]),2)
+hierPriorObjFunTab["selAlphaDevSR",1]    <- round(sum(selAlphaDevNLP_pg[,2]),2)
+hierPriorObjFunTab["selAlphaDevGn",1]    <- round(sum(selAlphaDevNLP_pg[,3]),2)
+hierPriorObjFunTab["selBetaDevR",1]      <- round(sum(selBetaDevNLP_pg[,1]),2)
+hierPriorObjFunTab["selBetaDevSR",1]     <- round(sum(selBetaDevNLP_pg[,2]),2)
+hierPriorObjFunTab["selBetaDevGn",1]     <- round(sum(selBetaDevNLP_pg[,3]),2)
+
+
+
+
+
+kable(  hierPriorObjFunTab, escape = FALSE, 
+        caption = hierPriorObjFunCap, booktabs = T,
+        align = rep("c",ncol(hierPriorObjFunTab))) %>%
+  kable_styling(latex_options = c("striped", "scale_down","hold_position"),
+                bootstrap_options = c("striped", "hover"))
+```
+
+## Phase fit table
+
+```{r, phaseTable, echo = FALSE }
+phaseReportTable <- reports$fitReport
+
+kable(  phaseReportTable, escape = FALSE, 
+        caption = "Optimisation performance of SISCAL for each phase.", booktabs = T,
+        align = rep("c",ncol(phaseReportTable))) %>%
+  kable_styling(latex_options = c("striped", "scale_down","hold_position"),
+                bootstrap_options = c("striped", "hover"))
+
+```
+
+
+## Leading Parameter SDReport
+```{r gradTable, echo = FALSE }
+gradTable <- reports$grad 
+
+parnames <- rownames(gradTable)
+maxCV <- max(gradTable$cv, na.rm = T)
+
+gradTable <- gradTable %>%
+              mutate( 
+                est = round(est, 4),
+                se = round(se, 4),
+                gr = signif(gr,2),
+                cv = round(cv,4),
+                gr =  ifelse( is.finite(gr),
+                        cell_spec(  x = gr, format = "html",
+                                    bold = ifelse( abs(gr) > 1e-3, TRUE, FALSE),
+                                    color = ifelse( abs(gr) > 1e-3, "red", "black") ),
+                        cell_spec( x = gr, format = "html",
+                                    bold = TRUE, color = "red") ),
+                cv =  ifelse( is.finite(cv),
+                        ifelse( cv > 3,
+                          cell_spec( x = cv, format = "html",
+                                      color = "red", bold = TRUE),
+                          cell_spec(  x = cv, format = "html",
+                                      color = spec_color( cv, 
+                                                          begin = .75, 
+                                                          end = .25,
+                                                          direction = 1,
+                                                          na_color = "red",
+                                                          option = "magma" ),
+                                      bold = cv > .5 )
+                                ),
+                        cell_spec(  x = cv, format = "html",
+                                    color = "red", bold = TRUE) ) )
+
+                      
+
+rownames(gradTable) <- parnames
+
+kable(  gradTable, escape = FALSE, 
+        caption = sdRepCap, booktabs = T,
+        align = rep("c",ncol(gradTable))) %>%
+  kable_styling(latex_options = c("striped", "scale_down","hold_position"),
+                bootstrap_options = c("striped", "hover"))
+
+
+```
+
+# MCMC posteriors
+
+## MCMC performance
+
+```{r MCMCdiags, echo = FALSE, warning = FALSE, eval = isStan, fig.cap = "MCMC diagnostics plot."}
+plotMCdiagnostics( reports )
+
+```
+
+## Prior/Posterior comparison
+
+```{r steepPriorPost, echo = FALSE, warning = FALSE, eval = isPosts, fig.cap = "Prior (line) and posterior (bars) density of stock-recruit steepness."}
+plotPriorPosteriorSteep( reports )
+```
+
+```{r mortPriorPost, echo = FALSE, warning = FALSE, eval = isPosts, fig.cap = "Prior (line) and posterior (bars) density of initial M (top) and time-averaged M (bottom) for males (blue) and females (red)."}
+plotPriorPosteriorM( reports )
+```
+
+
+# Other
+
+## Compositional Likelihood Correlation Matrices
+
+```{r compCorrMtx, echo = FALSE, fig.cap = compCorrMtxCap[1:3], eval = FALSE}
+
+for( g in 1:3 )
+{
+  Corr <- repObj$Corr_gaa[g,,]
+  corrplot.mixed( Corr, lower.col = "black", number.cex = .7 )
+}
+
+```
+
+
+# Comparisons with SCAL
+
+```{r, SCALcaptions, include = FALSE, echo = FALSE}
+
+compareAgeCompsCap <- "Plots of average age composition fits at the major stock level. Left is SISCA, right is ISCAM."
+
+compareSBRtCap   <- "Comparison of spawning stock biomass and age-1 recruitment at the major stock level between SCAL and SISCAL-AH."
+
+
+
+```
+
+```{r BtRtComparison, echo = FALSE, fig.cap = compareSBRtCap}
+
+plotBtRtComparison( repObj      = repObj,
+                    datObj      = reports$data,  
+                    prevRep     = SCALrep,
+                    fYearSISCA  = fYear,
+                    lYearSISCA  = lYear)
+
+
+```
+
+```{r plotCompSel, echo = FALSE, fig.cap = compareSBRtCap}
+
+plotSelComparison(  repObj      = repObj,
+                    prevRep     = SCALrep )
+
+
+```
+
+

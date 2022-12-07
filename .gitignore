@@ -1,0 +1,27 @@
+# Files ignored by git tracker
+
+# Temporary files from R
+*.Rapp.history
+*.DS_Store
+
+# Compiled stock assessment model
+*.o
+*.so
+
+# Outputs folder to remove fit models
+Outputs/
+References/
+predation
+
+# Batch tmp files
+Batch/batchDesign.txt
+Batch/job*.txt
+
+# Any output report and image files
+*.html
+*.pdf
+*.png
+
+# latex tmp files
+*.log
+*.upa

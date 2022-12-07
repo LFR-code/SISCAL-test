@@ -1,0 +1,40 @@
+# Batch File
+parameter value
+#
+# Data Scenarios
+#
+# Scenario 1 : WCVI_agg
+#
+scenario$scenario1$ctrl$dataScenarioName 'WCVI_aggregate'
+scenario$scenario1$data$fYearAssess 1951
+#
+# Model Hypotheses
+#
+# Hypothesis 1 : CommercialOnly
+#
+mp$mp1$ctrl$modelHypName 'CommOnly'
+mp$mp1$data$fleetnames_g c("reduction","seineRoe","gillnet","surface","dive")
+#
+# Hypothesis 2 : wSOK
+#
+mp$mp2$ctrl$modelHypName 'wSOK'
+mp$mp2$data$fleetnames_g c("reduction","seineRoe","gillnet","surface","dive","SOK")
+#
+# Hypothesis 3 : SOK_Preds_noGW
+#
+mp$mp3$ctrl$modelHypName 'SOK_Preds_noGW'
+mp$mp3$data$fleetnames_g c("reduction","seineRoe","gillnet","surface","dive","SOK","hakeLt50","hakeGt50","HS","SSL","HB")
+#
+# Hypothesis 4 : SOK_Preds_GWx1.0
+#
+mp$mp4$ctrl$modelHypName 'SOK_Preds_GWx1.0'
+mp$mp4$data$fleetnames_g c("reduction","seineRoe","gillnet","surface","dive","SOK","hakeLt50","hakeGt50","HS","SSL","HB","GW")
+mp$mp4$data$fleetCatMult c(reduction=1,seineRoe=1,gillnet=1,surface=1,dive=1,SOK=1,hakeLt50=1,hakeGt50=1,HS=1,SSL=1,HB=1,GW=1.0)
+#
+# Hypothesis 5 : SOK_Preds_GWx0.1
+#
+mp$mp5$ctrl$modelHypName 'SOK_Preds_GWx0.1'
+mp$mp5$data$fleetnames_g c("reduction","seineRoe","gillnet","surface","dive","SOK","hakeLt50","hakeGt50","HS","SSL","HB","GW")
+mp$mp5$data$fleetCatMult c(reduction=1,seineRoe=1,gillnet=1,surface=1,dive=1,SOK=1,hakeLt50=1,hakeGt50=1,HS=1,SSL=1,HB=1,GW=0.1)
+#
+# File Ends <not run>.
